@@ -240,3 +240,9 @@ refuses to delete a directory it did not create.
 python3 -m unittest discover -s tests
 pre-commit install      # ruff, YAML/TOML checks and unit tests on each commit
 ```
+
+## Support
+
+If this made your graph smile, you can buy me a coffee:
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-francoisgn-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/francoisgn)

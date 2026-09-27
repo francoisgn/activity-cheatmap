@@ -148,7 +148,9 @@ class CliTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("--force", output)
 
-            code, output = self.run_cli(*common[:4], "--remote", str(Path(tmp) / "missing.git"), "--no-preview")
+            code, output = self.run_cli(
+                *common[:4], *common[8:12], "--remote", str(Path(tmp) / "missing.git"), "--no-preview"
+            )
             self.assertEqual(code, 1)
             self.assertIn("create it on GitHub first", output)
 

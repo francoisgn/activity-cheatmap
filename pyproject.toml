@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "activity-cheatmap"
+dynamic = ["version"]
+description = "Draw patterns on your GitHub contribution graph with backdated commits"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+yaml = ["pyyaml"]
+image = ["pillow"]
+all = ["pyyaml", "pillow"]
+
+[project.scripts]
+cheatmap = "cheatmap.cli:main"
+
+[tool.setuptools]
+packages = ["cheatmap"]
+
+[tool.setuptools.dynamic]
+version = { attr = "cheatmap.__version__" }
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

@@ -1,0 +1,20 @@
+# activity-cheatmap plan: python3 -m cheatmap --config <this file>
+# periods: YYYY, YYYY-H1 or YYYY-H2 | levels: 0 (empty) to 4 (darkest)
+scale: 3
+message: "Update activity"
+segments:
+  - periods: ["2024"]
+    pattern: gradient-diag
+    options:
+      direction: "up-right"
+      cycles: 4
+      mirror: true
+  - periods: ["2025"]
+    pattern: text
+    options:
+      text: "HI THERE"
+  - periods: ["2026-H1"]
+    pattern: weekly
+    options:
+      levels: [1, 2, 3, 4, 4, 0, 0]
+    skip: ["weekends"]

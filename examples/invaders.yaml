@@ -1,0 +1,9 @@
+# Space invaders marching across 2025.
+scale: 3
+segments:
+  - periods: ["2025"]
+    pattern: image
+    options:
+      file: "invader.txt"
+      tile: true
+      gap: 2

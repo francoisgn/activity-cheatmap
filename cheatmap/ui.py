@@ -17,7 +17,7 @@ def color_enabled(stream=None) -> bool:
     return stream.isatty() and not os.environ.get("NO_COLOR")
 
 
-GREEN, YELLOW, RED, BLUE, DIM, BOLD = "32", "33", "31", "34", "2", "1"
+GREEN, YELLOW, RED, BLUE, CYAN, DIM, BOLD = "32", "33", "31", "34", "36", "2", "1"
 
 
 def paint(code: str, text: str, stream=None) -> str:

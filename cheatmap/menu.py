@@ -38,25 +38,46 @@ def _read(prompt: str) -> str:
         raise Quit from None
 
 
-def ask(question: str, default: str = "") -> str:
+def read_answer() -> str:
+    """Input line, clearly apart from the instructions: '  ❯ ' then the typed text in bold."""
+    if not ui.color_enabled():
+        return _read("  > ")
+    try:
+        return _read(f"  {ui.paint(ui.CYAN, '❯')} \033[1m")
+    finally:
+        print("\033[0m", end="", flush=True)
+
+
+def question_line(question: str, hints: list[str]) -> None:
+    """Question on its own line, then the hints (dim) on the next one."""
+    print(f"{ui.paint(ui.BLUE, '?')} {ui.paint(ui.BOLD, question)}")
+    if hints:
+        print(ui.dim("  " + " · ".join(hints)))
+
+
+def ask(question: str, default: str = "", hints: list[str] | None = None) -> str:
     """Free text. Enter keeps the default, '<' goes back."""
-    suffix = ui.dim(f" [{default}]") if default else ""
-    answer = _read(f"{ui.paint(ui.BLUE, '?')} {question}{suffix} ").strip()
+    extra = [f"Enter = {default}"] if default else []
+    question_line(question, (hints or []) + extra + ["< = back"])
+    answer = read_answer().strip()
     if answer == "<":
         raise Back
     return answer or default
 
 
 def confirm(question: str, default: bool = False) -> bool:
-    hint = "Y/n" if default else "y/N"
     while True:
-        answer = ask(f"{question} ({hint})").lower()
+        question_line(question, ["y = yes", "n = no", f"Enter = {'yes' if default else 'no'}", "< = back"])
+        answer = read_answer().strip().lower()
+        if answer == "<":
+            raise Back
         if not answer:
             return default
         if answer in ("y", "yes", "o", "oui"):
             return True
         if answer in ("n", "no", "non"):
             return False
+        ui.warn("answer y or n")
 
 
 def _heading(title: str) -> None:
@@ -71,8 +92,10 @@ def choose(title: str, items: list[tuple[str, str]], back: str | None = "back") 
         print(f"  {ui.paint(ui.GREEN, f'{number:>2}')}) {label:<28} {ui.dim(description)}")
     back_hint = f"{ui.paint(ui.YELLOW, 'b')}) {back}    " if back else ""
     print(f"   {back_hint}{ui.paint(ui.YELLOW, 'q')}) quit")
+    print()
+    print(ui.dim(f"  type a number (1-{len(items)})" + (f", b = {back}" if back else "") + ", q = quit"))
     while True:
-        answer = _read(f"{ui.paint(ui.BLUE, '>')} ").strip().lower()
+        answer = read_answer().strip().lower()
         if back and answer in ("b", "<"):
             raise Back
         if answer == "q":
@@ -102,8 +125,9 @@ def choose_many(title: str, items: list[tuple[str, str]]) -> list[int]:
     _heading(title)
     for number, (label, description) in enumerate(items, 1):
         print(f"  {ui.paint(ui.GREEN, f'{number:>2}')}) {label:<28} {ui.dim(description)}")
+    print()
     while True:
-        answer = ask("pick one or more (e.g. 1,3 or 2-4), '<' to go back")
+        answer = ask("Pick one or more", hints=["e.g. 3 or 1,3 or 2-4 or all"])
         try:
             picked = parse_selection(answer, len(items))
         except ValueError:
@@ -298,8 +322,13 @@ def ask_option(opt: patterns.Opt, current):
             items = [(choice, "current" if choice == current else "") for choice in opt.choices]
             return opt.choices[choose(f"{opt.name}: {opt.help}", items)]
         shown = "" if current is None else option_text(current)
-        hint = {"level": " (0-4)", "levels": " (7 levels 0-4, Monday first)", "bool": " (true/false)"}.get(opt.kind, "")
-        answer = ask(f"{opt.name}: {opt.help}{hint}", shown)
+        hint = {
+            "level": ["level 0 (empty) to 4 (darkest)"],
+            "levels": ["7 levels 0-4, Monday first, e.g. 1,2,3,4,4,4,0"],
+            "bool": ["true or false"],
+            "int": [f"whole number >= {opt.minimum}"],
+        }.get(opt.kind, [])
+        answer = ask(f"{opt.name}: {opt.help}", shown, hints=hint)
         try:
             return patterns.coerce(opt, answer)
         except patterns.PatternError as error:
@@ -319,7 +348,7 @@ def _pick_pattern(state: State, today: date) -> bool:
     pattern = patterns.PATTERNS[name]
     options = dict(state.options) if name == state.pattern else {}
     required = [opt for opt in pattern.opts if opt.default is None]
-    customise = not required and confirm("customise the options?", default=False)
+    customise = not required and confirm("Customise the pattern options?", default=False)
     for opt in pattern.opts:
         if opt.default is None or customise:
             options[opt.name] = ask_option(opt, options.get(opt.name, opt.default))
@@ -426,7 +455,7 @@ def step_skip(state: State, today: date) -> None:
     )
     if index == 3:
         while True:
-            answer = ask("days to skip (mon..sun, weekdays, weekends)", ",".join(state.skip))
+            answer = ask("Days to skip", ",".join(state.skip), hints=["mon..sun, weekdays, weekends, comma-separated"])
             try:
                 parse_skip(answer)
                 break
@@ -441,7 +470,7 @@ def step_scale(state: State, today: date) -> None:
     _heading("Intensity")
     print(ui.dim(f"  commits per day = level (0-4) x scale; higher = your real activity shows less (1-{MAX_SCALE})"))
     while True:
-        answer = ask("scale", str(state.scale))
+        answer = ask("Intensity (scale)", str(state.scale), hints=[f"1 to {MAX_SCALE}"])
         if answer.isdigit() and 1 <= int(answer) <= MAX_SCALE:
             state.scale = int(answer)
             return
@@ -474,10 +503,10 @@ def step_preview(state: State, today: date) -> str | None:
 
 def ask_compare() -> str:
     """'-' for no comparison, else the GitHub login to compare with."""
-    if not confirm("show your current GitHub graph next to the result (before / after)?", default=True):
+    if not confirm("Show your current GitHub graph next to the result (before / after)?", default=True):
         return "-"
     while True:
-        login = ask("GitHub user", github_user())
+        login = ask("Your GitHub login", github_user())
         if re.fullmatch(r"[A-Za-z0-9-]+", login):
             return login
         ui.warn("type a GitHub login (letters, digits, dashes)")
@@ -489,15 +518,15 @@ def step_push(state: State) -> bool:
     print(ui.dim("  create it empty (no README), private is fine: https://github.com/new"))
     print(ui.dim("  or: gh repo create cheatmap-output --private"))
     user = github_user() or "<user>"
-    remote = ask("remote URL", f"git@github.com:{user}/cheatmap-output.git")
+    remote = ask("Remote URL of the output repository", f"git@github.com:{user}/cheatmap-output.git")
     print(ui.dim("  a drawing already on it is kept: new periods are added, periods drawn again are replaced"))
-    force = confirm("wipe the whole existing drawing instead?", default=False)
+    force = confirm("Wipe the whole existing drawing instead?", default=False)
     extra = ["--remote", remote, "--no-preview"] + (["--force"] if force else [])
     return run_cli(state.argv(*extra)) == 0
 
 
 def step_save(state: State) -> None:
-    path = Path(ask("file", "plan.yaml")).expanduser()
+    path = Path(ask("YAML file to write", "plan.yaml")).expanduser()
     if path.exists() and not confirm(f"{path} exists, overwrite?"):
         return
     config.save(state.plan(), path)

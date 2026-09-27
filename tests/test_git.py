@@ -17,12 +17,18 @@ def git(*args, cwd=None):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=True).stdout
 
 
+def bare_remote(path):
+    """Bare repo without the background gc a push triggers (it races the temp dir cleanup)."""
+    git("init", "--quiet", "--bare", str(path))
+    git("config", "receive.autogc", "false", cwd=path)
+
+
 class GitTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
         self.remote = self.tmp / "remote.git"
-        git("init", "--quiet", "--bare", str(self.remote))
+        bare_remote(self.remote)
 
     def tearDown(self):
         self._tmp.cleanup()
@@ -102,7 +108,7 @@ class CliTest(unittest.TestCase):
     def test_end_to_end_and_force(self):
         with tempfile.TemporaryDirectory() as tmp:
             remote = Path(tmp) / "remote.git"
-            git("init", "--quiet", "--bare", str(remote))
+            bare_remote(remote)
             common = [
                 "-p",
                 "2025-H1",

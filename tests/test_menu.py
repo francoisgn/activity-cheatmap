@@ -73,6 +73,8 @@ class WizardTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             remote = Path(tmp) / "remote.git"
             subprocess.run(["git", "init", "--quiet", "--bare", str(remote)], check=True)
+            # no background gc after the push: it races the temp dir cleanup
+            subprocess.run(["git", "config", "receive.autogc", "false"], cwd=remote, check=True)
             workdir = Path(tmp) / "out"
             answers = [
                 "2",  # main menu: generate

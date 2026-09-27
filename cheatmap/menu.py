@@ -490,7 +490,8 @@ def step_push(state: State) -> bool:
     print(ui.dim("  or: gh repo create cheatmap-output --private"))
     user = github_user() or "<user>"
     remote = ask("remote URL", f"git@github.com:{user}/cheatmap-output.git")
-    force = confirm("if the remote already has commits, replace its history?", default=False)
+    print(ui.dim("  a drawing already on it is kept: new periods are added, periods drawn again are replaced"))
+    force = confirm("wipe the whole existing drawing instead?", default=False)
     extra = ["--remote", remote, "--no-preview"] + (["--force"] if force else [])
     return run_cli(state.argv(*extra)) == 0
 

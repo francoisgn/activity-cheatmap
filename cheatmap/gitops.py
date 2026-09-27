@@ -1,8 +1,13 @@
 """Local repository generation (git fast-import) and throttled push.
 
 Commits are created locally, with no network. The only calls to GitHub are
-`git ls-remote` (one) and the pushes, sent in batches with a pause between
-them; the pause grows after a transient failure.
+`git ls-remote`, one fetch when the remote already holds a drawing, and the
+pushes, sent in batches with a pause between them; the pause grows after a
+transient failure.
+
+GitHub counts a commit on its author date, whatever its place in the
+history: new periods are appended on top of an existing drawing, only a
+period drawn again needs the history to be rebuilt.
 """
 
 from __future__ import annotations
@@ -12,11 +17,13 @@ import re
 import shutil
 import subprocess
 import time
+from collections import Counter
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 MARKER_KEY = "cheatmap.generated"
+EXISTING_REF = "refs/cheatmap/existing"  # the remote branch, fetched locally
 LOG_FILE = "activity.log"
 MAX_ATTEMPTS = 4
 MAX_DELAY = 60.0
@@ -49,7 +56,7 @@ _HINTS = (
         r"could not resolve host|connection (timed out|refused|reset)|network is unreachable|operation timed out",
         "cannot reach GitHub: check your network",
     ),
-    (r"rejected|non-fast-forward", "the remote has other commits: use --force to replace its history"),
+    (r"rejected|non-fast-forward", "the remote changed during the run: run it again"),
 )
 
 
@@ -100,11 +107,43 @@ def _data(payload: str) -> bytes:
     return b"data %d\n%s\n" % (len(raw), raw)
 
 
-def build(workdir: Path, schedule: list[tuple[date, int]], name: str, email: str, message: str, branch: str) -> int:
-    """Create a bare repository with `count` commits on each scheduled day."""
+def init_repo(workdir: Path, branch: str) -> None:
+    if (workdir / "HEAD").exists():
+        return
     workdir.parent.mkdir(parents=True, exist_ok=True)
     git("init", "--quiet", "--bare", "--initial-branch", branch, str(workdir))
     git("config", MARKER_KEY, "true", cwd=workdir)
+
+
+def fetch_existing(workdir: Path, remote: str, branch: str) -> None:
+    """Fetch the remote branch (the current drawing) as EXISTING_REF."""
+    init_repo(workdir, branch)
+    git("fetch", "--quiet", "--no-tags", remote, f"+refs/heads/{branch}:{EXISTING_REF}", cwd=workdir)
+
+
+def existing_days(workdir: Path) -> dict[date, int]:
+    """Commits per day (UTC author date) of the fetched drawing."""
+    stamps = git("log", "--format=%at", EXISTING_REF, cwd=workdir).split()
+    return dict(Counter(datetime.fromtimestamp(int(stamp), timezone.utc).date() for stamp in stamps))
+
+
+def foreign_files(workdir: Path) -> set[str]:
+    """Files touched by the fetched history other than the tool's own log file."""
+    names = git("log", "--format=", "--name-only", EXISTING_REF, cwd=workdir).split("\n")
+    return {name for name in names if name.strip()} - {LOG_FILE}
+
+
+def build(
+    workdir: Path,
+    schedule: list[tuple[date, int]],
+    name: str,
+    email: str,
+    message: str,
+    branch: str,
+    parent: str | None = None,
+) -> int:
+    """Create `count` commits on each scheduled day, on top of `parent` if given."""
+    init_repo(workdir, branch)
     identity = f"{name} <{email}>".encode()
     process = subprocess.Popen(
         ["git", "fast-import", "--quiet", "--done"],
@@ -121,6 +160,8 @@ def build(workdir: Path, schedule: list[tuple[date, int]], name: str, email: str
             process.stdin.write(b"commit refs/heads/%s\n" % branch.encode())
             process.stdin.write(b"author " + stamp + b"committer " + stamp)
             process.stdin.write(_data(message))
+            if parent and total == 1:
+                process.stdin.write(b"from %s\n" % parent.encode())
             process.stdin.write(b"M 100644 inline %s\n" % LOG_FILE.encode())
             process.stdin.write(_data(f"{day.isoformat()} #{index + 1}"))
     process.stdin.write(b"done\n")
@@ -147,9 +188,13 @@ def push(
     force: bool,
     progress: Callable[[int, int, int], None],
     sleep: Callable[[float], None] = time.sleep,
+    base: str | None = None,
 ) -> int:
-    """Push history oldest first, `batch_size` commits at a time. Returns the number of pushes."""
-    shas = git("rev-list", "--reverse", branch, cwd=workdir).split()
+    """Push history oldest first, `batch_size` commits at a time. Returns the number of pushes.
+
+    `base`: commits already on the remote (only the ones after it are pushed).
+    """
+    shas = git("rev-list", "--reverse", f"{base}..{branch}" if base else branch, cwd=workdir).split()
     ends = batch_ends(len(shas), batch_size)
     for number, end in enumerate(ends, 1):
         progress(number, len(ends), end + 1)

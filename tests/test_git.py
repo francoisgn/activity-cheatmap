@@ -118,45 +118,68 @@ class CliTest(unittest.TestCase):
             code = cli.main(list(argv))
         return code, out.getvalue() + err.getvalue()
 
-    def test_end_to_end_and_force(self):
+    def test_incremental_pushes(self):
         with tempfile.TemporaryDirectory() as tmp:
             remote = Path(tmp) / "remote.git"
             bare_remote(remote)
-            common = [
-                "-p",
-                "2025-H1",
-                "-P",
-                "weekly",
-                "--remote",
-                str(remote),
-                "--workdir",
-                str(Path(tmp) / "out"),
-                "--name",
-                "Me",
-                "--email",
-                "me@users.noreply.github.com",
-                "--delay",
-                "0",
-                "--batch-size",
-                "500",
-            ]
-            code, output = self.run_cli(*common, "-o", "levels=1,0,0,0,0,0,0")
+            common = ["--remote", str(remote), "--workdir", str(Path(tmp) / "out"), "--no-preview"]
+            common += ["--name", "Me", "--email", "me@users.noreply.github.com", "--delay", "0", "--batch-size", "50"]
+
+            def per_half():
+                stamps = git("log", "--format=%ad", "--date=short", "main", cwd=remote).split()
+                return Counter(f"{stamp[:4]}-H{1 if stamp[5:7] <= '06' else 2}" for stamp in stamps)
+
+            # 1. first drawing: Mondays of 2025-H1 at level 1 -> 26 days x 3
+            code, output = self.run_cli("-p", "2025-H1", "-P", "weekly", "-o", "levels=1,0,0,0,0,0,0", *common)
             self.assertEqual(code, 0, output)
-            self.assertEqual(git("rev-list", "--count", "main", cwd=remote).strip(), str(26 * 3))
+            self.assertEqual(per_half(), {"2025-H1": 78})
+            first_tip = git("rev-parse", "main", cwd=remote).strip()
 
-            code, output = self.run_cli(*common)
+            # 2. another period: appended on top, no rewrite, no question
+            code, output = self.run_cli("-p", "2024-H2", "-P", "weekly", "-o", "levels=0,0,0,0,0,0,1", *common)
+            self.assertEqual(code, 0, output)
+            self.assertIn("added on top", output)
+            self.assertEqual(per_half(), {"2025-H1": 78, "2024-H2": 78})
+            git("merge-base", "--is-ancestor", first_tip, "main", cwd=remote)  # history not rewritten
+
+            # 3. drawing 2025-H1 again: needs a confirmation (none in tests)
+            redraw = ["-p", "2025-H1", "-P", "weekly", "-o", "levels=0,2,0,0,0,0,0", *common]
+            code, output = self.run_cli(*redraw)
             self.assertEqual(code, 1)
-            self.assertIn("--force", output)
+            self.assertIn("already drawn", output)
+            self.assertEqual(per_half(), {"2025-H1": 78, "2024-H2": 78})
 
-            code, output = self.run_cli(
-                *common[:4], *common[8:12], "--remote", str(Path(tmp) / "missing.git"), "--no-preview"
-            )
+            # 4. confirmed: 2025-H1 replaced (25 Tuesdays x level 2 x 3), 2024-H2 kept
+            code, output = self.run_cli(*redraw, "--yes")
+            self.assertEqual(code, 0, output)
+            self.assertEqual(per_half(), {"2025-H1": 25 * 6, "2024-H2": 78})
+
+            # 5. --force: the whole drawing replaced
+            code, output = self.run_cli("-p", "2025-H1", "-P", "solid", "-o", "level=1", *common, "--force", "--yes")
+            self.assertEqual(code, 0, output)
+            self.assertEqual(per_half(), {"2025-H1": 181 * 3})
+
+            # 6. missing repository: plain hint
+            missing = [arg if arg != str(remote) else str(Path(tmp) / "missing.git") for arg in common]
+            code, output = self.run_cli("-p", "2025-H1", "-P", "solid", *missing)
             self.assertEqual(code, 1)
             self.assertIn("create it on GitHub first", output)
 
-            code, output = self.run_cli(*common, "-o", "levels=0,0,0,0,0,0,2", "--force", "--yes")
-            self.assertEqual(code, 0, output)
-            self.assertEqual(git("rev-list", "--count", "main", cwd=remote).strip(), str(26 * 6))
+    def test_refuses_foreign_history(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            remote, clone = Path(tmp) / "remote.git", Path(tmp) / "clone"
+            bare_remote(remote)
+            git("clone", "--quiet", str(remote), str(clone))
+            (clone / "README.md").write_text("hello\n")
+            git("add", "README.md", cwd=clone)
+            git("-c", "user.name=x", "-c", "user.email=x@example.com", "commit", "-qm", "readme", cwd=clone)
+            git("push", "--quiet", "origin", "HEAD:main", cwd=clone)
+            code, output = self.run_cli(
+                "-p", "2025-H1", "-P", "solid", "--remote", str(remote), "--workdir", str(Path(tmp) / "out"),
+                "--name", "Me", "--email", "me@example.com", "--no-preview",
+            )  # fmt: skip
+            self.assertEqual(code, 1)
+            self.assertIn("not made by activity-cheatmap (README.md)", output)
 
     def test_dry_run_and_errors(self):
         code, output = self.run_cli("-p", "2025", "-P", "gradient-diag", "-o", "direction=up-left", "-n")

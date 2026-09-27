@@ -72,8 +72,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     push.add_argument(
         "--delay", type=float, default=DEFAULT_DELAY, help=f"seconds between pushes (default {DEFAULT_DELAY:g})"
     )
-    push.add_argument("--force", action="store_true", help="replace the history of a non-empty remote")
-    push.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation with --force")
+    push.add_argument(
+        "--force",
+        action="store_true",
+        help="replace the whole existing drawing (default: keep it, add or redraw periods)",
+    )
+    push.add_argument("-y", "--yes", action="store_true", help="do not ask for confirmation")
     return parser.parse_args(argv)
 
 
@@ -234,37 +238,87 @@ def run(args: argparse.Namespace, argv_empty: bool = False) -> int:
 
     with ui.spin(f"checking {args.remote}"):
         branches = gitops.remote_branches(args.remote)
-    if branches:
-        if not args.force:
-            raise PlanError(f"remote is not empty ({', '.join(branches)}), use --force to replace '{args.branch}'")
-        others = [branch for branch in branches if branch != args.branch]
-        if others:
-            ui.warn(f"other branches are kept on the remote: {', '.join(others)}")
-        question = f"force-push {layout.commits} commits to {args.remote} ({args.branch}), replacing its history?"
-        if not args.yes and not confirm(question):
-            ui.warn("aborted, nothing pushed")
-            return 1
-
+    others = [branch for branch in branches if branch != args.branch]
+    if others:
+        ui.warn(f"other branches are left untouched on the remote: {', '.join(others)}")
     workdir = args.workdir or Path("out") / repo_name(args.remote)
-    with ui.spin(f"creating {layout.commits} commits in {workdir}") as spinner:
-        gitops.prepare_workdir(workdir)
-        gitops.build(workdir, layout.schedule(), name, email, plan.message, args.branch)
-        spinner.detail = f"{layout.active_days} days"
+    gitops.prepare_workdir(workdir)
 
+    schedule, parent, force = layout.schedule(), None, False
+    if args.branch in branches:
+        if args.force:
+            question = (
+                f"replace the WHOLE drawing on {args.remote} ({args.branch}) with these {layout.commits} commits?"
+            )
+            if not args.yes and not confirm(question):
+                ui.warn("aborted, nothing pushed")
+                return 1
+            force = True
+        else:
+            merged = merge_existing(args, layout, workdir)
+            if merged is None:
+                ui.warn("aborted, nothing pushed")
+                return 1
+            schedule, parent, force = merged
+
+    commits = sum(count for _, count in schedule)
+    with ui.spin(f"creating {commits} commits in {workdir}") as spinner:
+        gitops.build(workdir, schedule, name, email, plan.message, args.branch, parent)
+        spinner.detail = f"{len(schedule)} days"
+
+    pushes = -(-commits // args.batch_size)
     eta = pushes * (args.delay + PUSH_ESTIMATE)
     ui.info(f"pushing in {pushes} batch(es) of {args.batch_size} commits, ~{eta:.0f}s")
     with ui.spin("pushing") as spinner:
 
-        def progress(number: int, total: int, commits: int) -> None:
-            spinner.update(
-                f"push {number}/{total} - {commits * 100 // layout.commits}% ({commits}/{layout.commits} commits)"
-            )
+        def progress(number: int, total: int, done: int) -> None:
+            spinner.update(f"push {number}/{total} - {done * 100 // commits}% ({done}/{commits} commits)")
 
-        done = gitops.push(workdir, args.remote, args.branch, args.batch_size, args.delay, args.force, progress)
-        spinner.update(f"pushed {layout.commits} commits to {args.remote}")
+        done = gitops.push(workdir, args.remote, args.branch, args.batch_size, args.delay, force, progress, base=parent)
+        spinner.update(f"pushed {commits} commits to {args.remote}")
         spinner.detail = f"{done} push(es)"
     ui.info("GitHub can take a few minutes to update the graph")
     return 0
+
+
+def merge_existing(args: argparse.Namespace, layout: Layout, workdir: Path):
+    """Combine the plan with the drawing already on the remote.
+
+    Returns (schedule, parent, force), or None if the user declines:
+    - no period drawn again: only the new commits, appended on top (no force-push);
+    - otherwise: the whole history rebuilt, the drawn-again periods replaced,
+      every other day kept as is (force-push).
+    """
+    with ui.spin("reading the drawing already on the remote") as spinner:
+        gitops.fetch_existing(workdir, args.remote, args.branch)
+        existing = gitops.existing_days(workdir)
+        spinner.detail = f"{sum(existing.values())} commits on {len(existing)} days, {years_of(existing)}"
+    foreign = sorted(gitops.foreign_files(workdir))
+    if foreign:
+        raise PlanError(
+            f"the remote has commits not made by activity-cheatmap ({', '.join(foreign[:3])}): "
+            "use an empty repository, or --force to replace everything"
+        )
+    periods = [item.period for item in layout.periods]
+    replaced = {day: n for day, n in existing.items() if any(p.start <= day <= p.end for p in periods)}
+    if not replaced:
+        ui.info("the existing drawing is kept, the new commits are added on top (no history rewrite)")
+        return layout.schedule(), gitops.EXISTING_REF, False
+
+    kept = {day: n for day, n in existing.items() if day not in replaced}
+    redrawn = [p.label for p in periods if any(p.start <= day <= p.end for day in replaced)]
+    ui.warn(f"{', '.join(redrawn)} already drawn: its {sum(replaced.values())} commits will be replaced")
+    if kept:
+        ui.info(f"kept as is: {sum(kept.values())} commits on {len(kept)} days, {years_of(kept)}")
+    question = "rebuild the history to redraw these periods (force-push, everything else is kept)?"
+    if not args.yes and not confirm(question):
+        return None
+    return sorted({**kept, **dict(layout.schedule())}.items()), None, True
+
+
+def years_of(days) -> str:
+    years = sorted({day.year for day in days})
+    return ", ".join(str(year) for year in years) if years else "none"
 
 
 def main(argv: list[str] | None = None) -> int:

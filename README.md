@@ -69,7 +69,8 @@ Main menu
 │   ├── 2.3  Days to skip     none, weekends, weekdays, custom days
 │   ├── 2.4  Preview          before (your current graph) / after, then:
 │   │                         push · save as YAML · change any step · show the command
-│   └── 2.5  Push             remote URL (repo created beforehand), replace or not,
+│   └── 2.5  Push             remote URL (repo created beforehand); an existing drawing
+│                             is kept (periods added or redrawn) unless you wipe it;
 │                             throttled push with progress
 └── 3  List patterns
 ```
@@ -107,7 +108,7 @@ python3 -m cheatmap --period 2025 --pattern gradient-diag -o direction=up-right 
 | `--user LOGIN` | GitHub login used to check the account creation date (default: `--compare`, or the login in a noreply email) |
 | `--no-preview` | no graph in the output (scripts) |
 | `-r, --remote` | output repository to push to |
-| `--force` / `-y, --yes` | replace a non-empty remote / without the confirmation |
+| `--force` / `-y, --yes` | replace the whole existing drawing / no confirmation |
 | `--batch-size`, `--delay` | push throttling (default 1000 commits, 2s) |
 | `--name`, `--email`, `--branch`, `--workdir`, `--message` | commit identity and output details |
 | `-m, --menu` | start the menu explicitly |
@@ -216,7 +217,8 @@ Image paths are relative to the YAML file. See [examples/](examples/).
 
 ## Being gentle with GitHub
 
-- Commits are built locally; GitHub only sees one `git ls-remote` and the pushes.
+- Commits are built locally; GitHub only sees one `git ls-remote`, one `git fetch`
+  when a drawing is already there, and the pushes.
 - History is pushed oldest first in batches of `--batch-size` commits (default 1000),
   with `--delay` seconds between pushes (default 2s). About 15 seconds per year of drawing.
 - A failed push is retried up to 3 times with a doubling delay (max 60s), and the
@@ -235,13 +237,22 @@ Git errors are translated into plain hints, the raw git message stays below:
 | SSH key refused | check `ssh -T git@github.com` |
 | HTTPS authentication | use the SSH URL or `gh auth login` |
 | Network | check your connection |
-| Remote has other commits | use `--force` to replace its history |
+| Push rejected | the remote changed during the run: run it again |
 
-## Regenerating
+## Adding or redrawing periods (incremental)
 
-The remote must be empty. To replace a previous drawing, add `--force`: you
-are asked to type `yes` (`--yes` skips the question) before the history of the
-branch is force-pushed. Other branches on the remote are left untouched.
+Come back any time: the drawing already on the remote is **kept**. GitHub counts
+a commit on its date, whatever its place in the history, so:
+
+| You push… | What happens | Force-push |
+|---|---|---|
+| a period **not drawn yet** (2023 on the remote, now 2021) | the new commits are appended on top, 2023 untouched | no |
+| a period **already drawn** (2023 again) | the history is rebuilt: the days of 2023 are replaced, every other day kept as is; you are asked to confirm (`--yes` skips it) | yes |
+| with `--force` | the whole drawing is replaced by the new plan (confirmation) | yes |
+
+The existing drawing is read with one `git fetch`. If the remote holds commits
+that the tool did not create (a README…), it refuses to rebuild: use an empty
+repository, or `--force`. Other branches on the remote are never touched.
 
 The local output (`out/<repo>`, or `--workdir`) is rebuilt on each run; the tool
 refuses to delete a directory it did not create.

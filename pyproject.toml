@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "Draw patterns on your GitHub contribution graph with backdated commits"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = []
 
 [project.optional-dependencies]
@@ -27,7 +27,7 @@ version = { attr = "cheatmap.__version__" }
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py39"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM"]

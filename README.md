@@ -44,7 +44,7 @@ clone this repo, create an empty repo on GitHub, push to it.
 
 ## Requirements
 
-- Python 3.10+ and git 2.28+, no dependency for the core.
+- Python 3.9+ (the macOS system `python3` works) and git 2.28+, no dependency for the core.
 - Optional: `pip install pyyaml` to read YAML plans, `pip install pillow` for image files.
   Or `pip install ".[all]"`, which also installs a `cheatmap` command.
 

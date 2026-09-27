@@ -28,7 +28,7 @@ SUBTITLE = "activity-cheatmap · draw on your GitHub contribution graph"
 
 def _colored(text: str, mask: str) -> str:
     out = []
-    for char, key in zip(text, mask, strict=True):
+    for char, key in zip(text, mask):
         color = _MASK_COLORS.get(key)
         out.append(f"\033[38;5;{color}m{char}\033[0m" if color and char != " " else char)
     return "".join(out)

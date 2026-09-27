@@ -85,7 +85,7 @@ def validate_periods(periods: list[Period], today: date) -> list[str]:
             raise PeriodError(f"{period.label}: starts in the future")
         if period.end > today:
             warnings.append(f"{period.label}: clipped to today ({today.isoformat()})")
-    for prev, cur in zip(ordered, ordered[1:], strict=False):
+    for prev, cur in zip(ordered, ordered[1:]):
         if cur.start <= prev.end:
             raise PeriodError(f"{prev.label} and {cur.label} overlap")
     total = sum(p.halves for p in ordered)

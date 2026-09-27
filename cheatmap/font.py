@@ -74,6 +74,6 @@ def render(text: str, spacing: int = 1) -> list[list[bool]]:
         if index:
             for row in rows:
                 row.extend([False] * spacing)
-        for row, line in zip(rows, glyph, strict=True):
+        for row, line in zip(rows, glyph):
             row.extend(pixel == "#" for pixel in line)
     return rows

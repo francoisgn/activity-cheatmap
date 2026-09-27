@@ -3,7 +3,7 @@ import random
 import subprocess
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import ExitStack, redirect_stderr, redirect_stdout
 from datetime import date
 from pathlib import Path
 from unittest import mock
@@ -59,13 +59,12 @@ class HelpersTest(unittest.TestCase):
 class WizardTest(unittest.TestCase):
     def drive(self, answers):
         out = io.StringIO()
-        with (
-            mock.patch("builtins.input", side_effect=answers),
-            mock.patch("sys.stdin.isatty", return_value=True),
-            mock.patch.object(menu, "github_user", return_value=""),
-            redirect_stdout(out),
-            redirect_stderr(out),
-        ):
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch("builtins.input", side_effect=answers))
+            stack.enter_context(mock.patch("sys.stdin.isatty", return_value=True))
+            stack.enter_context(mock.patch.object(menu, "github_user", return_value=""))
+            stack.enter_context(redirect_stdout(out))
+            stack.enter_context(redirect_stderr(out))
             code = menu.main_menu(TODAY)
         return code, out.getvalue()
 

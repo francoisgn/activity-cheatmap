@@ -14,7 +14,7 @@ from .periods import Period, parse_period, validate_periods
 
 DEFAULT_SCALE = 3
 MAX_SCALE = 10
-MAX_COMMITS = 25_000
+MAX_COMMITS = 100_000
 DEFAULT_MESSAGE = "Update activity"
 
 _DAYS = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
@@ -90,7 +90,7 @@ class Layout:
         return len(self.schedule())
 
 
-def compute(plan: Plan, today: date) -> tuple[Layout, list[str]]:
+def compute(plan: Plan, today: date, not_before: date | None = None) -> tuple[Layout, list[str]]:
     if not 1 <= plan.scale <= MAX_SCALE:
         raise PlanError(f"scale must be between 1 and {MAX_SCALE}")
     if not plan.segments:
@@ -106,9 +106,11 @@ def compute(plan: Plan, today: date) -> tuple[Layout, list[str]]:
             cell = patterns.build(segment.pattern, options, period.cols)
             levels = {}
             for day in period.days(until=today):
+                if not_before and day < not_before:
+                    continue  # before the account existed: would never show
                 levels[day] = 0 if day.weekday() in skip else cell(*period.cell(day))
             items.append(PeriodLevels(period, levels))
-    warnings = validate_periods([item.period for item in items], today)
+    warnings = validate_periods([item.period for item in items], today, not_before)
     items.sort(key=lambda item: item.period.start)
     layout = Layout(items, plan.scale)
     if layout.commits > MAX_COMMITS:

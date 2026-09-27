@@ -30,6 +30,37 @@ class GitError(RuntimeError):
     pass
 
 
+_HINTS = (
+    (
+        r"repository not found|does not appear to be a git repository",
+        "repository not found or not accessible: create it on GitHub first "
+        "(empty, no README, private is fine: https://github.com/new or `gh repo create <name> --private`) "
+        "and check the URL",
+    ),
+    (
+        r"permission denied \(publickey\)|host key verification failed",
+        "GitHub refused the SSH connection: check your key with `ssh -T git@github.com`",
+    ),
+    (
+        r"authentication failed|could not read username|terminal prompts disabled",
+        "HTTPS authentication failed: use the SSH URL (git@github.com:<user>/<repo>.git) or run `gh auth login`",
+    ),
+    (
+        r"could not resolve host|connection (timed out|refused|reset)|network is unreachable|operation timed out",
+        "cannot reach GitHub: check your network",
+    ),
+    (r"rejected|non-fast-forward", "the remote has other commits: use --force to replace its history"),
+)
+
+
+def explain(message: str) -> str | None:
+    """Plain-language hint for a git error message, if it is a known case."""
+    for pattern, hint in _HINTS:
+        if re.search(pattern, message, re.IGNORECASE):
+            return hint
+    return None
+
+
 def git(*args: str, cwd: Path | None = None) -> str:
     result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     if result.returncode:

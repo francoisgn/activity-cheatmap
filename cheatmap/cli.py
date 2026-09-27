@@ -53,6 +53,11 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     preview = parser.add_argument_group("preview")
     preview.add_argument("-n", "--dry-run", action="store_true", help="preview only, create and push nothing")
     preview.add_argument("--compare", metavar="USER", help="show the current graph of USER before the plan")
+    preview.add_argument(
+        "--user",
+        metavar="LOGIN",
+        help="GitHub login, to check the account creation date (default: from --compare or the email)",
+    )
     preview.add_argument("--no-preview", action="store_true", help="do not draw the graph (scripts)")
 
     push = parser.add_argument_group("generation and push")
@@ -147,6 +152,22 @@ def git_identity(args: argparse.Namespace) -> tuple[str, str]:
     return name, email
 
 
+def account_start(args: argparse.Namespace) -> date | None:
+    """Creation date of the GitHub account, or None (with a warning) if unknown."""
+    login = args.user or args.compare
+    if not login:
+        email = args.email or subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout
+        login = github.login_from_email(email)
+    if not login:
+        ui.warn("GitHub account unknown (--user): contributions dated before its creation will not show")
+        return None
+    try:
+        return github.account_created(login)
+    except github.FetchError as error:
+        ui.warn(f"{error}: check that the account existed for all periods")
+        return None
+
+
 def repo_name(remote: str) -> str:
     name = re.split(r"[/:]", remote.rstrip("/"))[-1]
     return re.sub(r"\.git$", "", name) or "output"
@@ -169,7 +190,7 @@ def run(args: argparse.Namespace, argv_empty: bool = False) -> int:
 
     plan = build_plan(args)
     today = date.today()
-    layout, warnings = compute(plan, today)
+    layout, warnings = compute(plan, today, account_start(args))
     for message in warnings:
         ui.warn(message)
 
@@ -251,7 +272,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
         return run(args, argv_empty=not argv)
-    except (PlanError, PeriodError, patterns.PatternError, gitops.GitError) as error:
+    except gitops.GitError as error:
+        hint = gitops.explain(str(error))
+        ui.ko(hint or str(error))
+        if hint:
+            detail = str(error).strip().splitlines()[0] if str(error).strip() else ""
+            print(ui.dim(f"        git: {detail}"), file=sys.stderr)
+        return 1
+    except (PlanError, PeriodError, patterns.PatternError) as error:
         ui.ko(str(error))
         return 1
     except KeyboardInterrupt:

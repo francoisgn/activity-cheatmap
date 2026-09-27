@@ -1,10 +1,13 @@
-"""Current contribution levels, read from the public profile calendar.
+"""Public GitHub data: contribution levels and account creation date.
 
-No API, no token: one HTML page per year, with a pause between requests.
+No token: one HTML page per year for the calendar (with a pause between
+requests), one unauthenticated API call for the account, cached per run.
 """
 
 from __future__ import annotations
 
+import functools
+import json
 import re
 import time
 import urllib.error
@@ -12,6 +15,7 @@ import urllib.request
 from datetime import date
 
 URL = "https://github.com/users/{user}/contributions?from={year}-01-01&to={year}-12-31"
+API_USER = "https://api.github.com/users/{user}"
 USER_AGENT = "activity-cheatmap (+https://github.com/francoisgn/activity-cheatmap)"
 REQUEST_DELAY = 1.5  # seconds between two requests
 TIMEOUT = 20
@@ -19,6 +23,7 @@ TIMEOUT = 20
 _TD = re.compile(r"<td[^>]*ContributionCalendar-day[^>]*>")
 _DATE = re.compile(r'data-date="(\d{4}-\d{2}-\d{2})"')
 _LEVEL = re.compile(r'data-level="(\d)"')
+_NOREPLY = re.compile(r"(?:\d+\+)?([A-Za-z0-9-]+)@users\.noreply\.github\.com")
 
 
 class FetchError(RuntimeError):
@@ -52,3 +57,24 @@ def fetch_levels(user: str, years: list[int], delay: float = REQUEST_DELAY) -> d
             raise FetchError(f"no calendar found for user '{user}' ({year})")
         levels.update(year_levels)
     return levels
+
+
+def login_from_email(email: str) -> str:
+    """GitHub login from a `<id>+<login>@users.noreply.github.com` address, else ''."""
+    match = _NOREPLY.fullmatch(email.strip())
+    return match.group(1) if match else ""
+
+
+@functools.cache
+def account_created(user: str) -> date:
+    """Creation date of a GitHub account (public API, no token)."""
+    request = urllib.request.Request(API_USER.format(user=user), headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+            data = json.load(response)
+    except urllib.error.HTTPError as error:
+        reason = "unknown user" if error.code == 404 else f"github.com answered {error.code}"
+        raise FetchError(f"{reason} '{user}'") from None
+    except (urllib.error.URLError, TimeoutError, ValueError) as error:
+        raise FetchError(f"cannot read account '{user}': {error}") from None
+    return date.fromisoformat(str(data.get("created_at", ""))[:10])

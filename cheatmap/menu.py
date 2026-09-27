@@ -15,8 +15,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from . import art, cli, config, patterns, ui
-from .periods import MAX_YEARS_BACK, PeriodError, parse_period, validate_periods
+from . import art, cli, config, github, patterns, ui
+from .periods import FIRST_YEAR, PeriodError, parse_period, validate_periods
 from .plan import DEFAULT_SCALE, MAX_SCALE, Plan, PlanError, Segment, parse_skip
 
 
@@ -171,9 +171,19 @@ def run_cli(argv: list[str]) -> int:
 
 def github_user() -> str:
     """GitHub login guessed from a noreply commit email, if any."""
-    email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout.strip()
-    match = re.fullmatch(r"(?:\d+\+)?([\w-]+)@users\.noreply\.github\.com", email)
-    return match.group(1) if match else ""
+    email = subprocess.run(["git", "config", "user.email"], capture_output=True, text=True).stdout
+    return github.login_from_email(email)
+
+
+def account_start() -> date | None:
+    """Creation date of the user's GitHub account, None if unknown (cached per run)."""
+    login = github_user()
+    if not login:
+        return None
+    try:
+        return github.account_created(login)
+    except github.FetchError:
+        return None
 
 
 # --- examples ------------------------------------------------------------
@@ -322,11 +332,16 @@ def _pick_pattern(state: State, today: date) -> bool:
     return True
 
 
-def half_starts(today: date) -> list[date]:
+def half_starts(today: date, first_year: int = FIRST_YEAR) -> list[date]:
+    """Jan 1 / Jul 1 of every half year from `first_year` to the current one."""
     starts = []
-    for year in range(today.year - MAX_YEARS_BACK, today.year + 1):
+    for year in range(first_year, today.year + 1):
         starts += [day for day in (date(year, 1, 1), date(year, 7, 1)) if day <= today]
     return starts
+
+
+def half_label(start: date) -> str:
+    return f"{start.year}-H{1 if start.month == 1 else 2}"
 
 
 def halves_between(start: date, end: date) -> list[str]:
@@ -363,22 +378,33 @@ def _pick_coverage(state: State, today: date) -> bool:
             ("Start and end", "from 01/01 or 01/07 to 30/06 or 31/12"),
         ],
     )
-    starts = half_starts(today)
-    if mode == 0:
-        years = sorted({day.year for day in starts})
-        items = [(str(year), "until today" if year == today.year else "") for year in years]
-        periods = [str(years[index]) for index in choose_many("Years (3 years max)", items)]
-    elif mode == 1:
-        labels = [f"{day.year}-H{1 if day.month == 1 else 2}" for day in starts]
-        items = [(label, "until today" if parse_period(label).end > today else "") for label in labels]
-        periods = merge_halves([labels[index] for index in choose_many("Semesters (6 max)", items)])
+    created = account_start()
+    first_year = max(FIRST_YEAR, created.year) if created else FIRST_YEAR
+    if created:
+        print(ui.dim(f"  your GitHub account was created on {created:%d/%m/%Y}: earlier years are not offered"))
     else:
-        start = starts[choose("Start date", [(day.strftime("%d/%m/%Y"), "") for day in starts])]
-        ends = [parse_period(f"{day.year}-H{1 if day.month == 1 else 2}").end for day in starts if day >= start]
-        items = [(day.strftime("%d/%m/%Y"), "clipped to today" if day > today else "") for day in ends]
+        print(ui.dim(f"  GitHub opened in {FIRST_YEAR}: make sure your account existed for the chosen periods"))
+    starts = half_starts(today, first_year)
+    years = sorted({day.year for day in starts})
+    if mode == 0:
+        items = [(str(year), "until today" if year == today.year else "") for year in years]
+        periods = [str(years[index]) for index in choose_many("Years", items)]
+    elif mode == 1:
+        picked = [years[index] for index in choose_many("Years of the semesters", [(str(y), "") for y in years])]
+        labels = [half_label(day) for day in starts if day.year in picked]
+        items = [(label, "until today" if parse_period(label).end > today else "") for label in labels]
+        periods = merge_halves([labels[index] for index in choose_many("Semesters", items)])
+    else:
+        start_year = years[choose("Start year", [(str(year), "") for year in years])]
+        options = [day for day in starts if day.year == start_year]
+        start = options[choose("Start date", [(f"{day:%d/%m/%Y}", "") for day in options])]
+        end_years = [year for year in years if year >= start.year]
+        end_year = end_years[choose("End year", [(str(year), "") for year in end_years])]
+        ends = [parse_period(half_label(day)).end for day in starts if day.year == end_year and day >= start]
+        items = [(f"{day:%d/%m/%Y}", "clipped to today" if day > today else "") for day in ends]
         periods = halves_between(start, ends[choose("End date", items)])
     try:
-        for message in validate_periods([parse_period(period) for period in periods], today):
+        for message in validate_periods([parse_period(period) for period in periods], today, created):
             ui.warn(message)
     except PeriodError as error:
         ui.ko(str(error))
@@ -427,10 +453,9 @@ def step_preview(state: State, today: date) -> str | None:
     _heading("2.4  Preview")
     if not state.compare:
         try:
-            user = ask("compare with the current graph of GitHub user (empty = no)", github_user())
+            state.compare = ask_compare()
         except Back:
             return "skip"  # '<' goes back to the previous step
-        state.compare = user or "-"
     extra = ["--dry-run"] + (["--compare", state.compare] if state.compare != "-" else [])
     run_cli(state.argv(*extra))
     actions = [
@@ -447,9 +472,22 @@ def step_preview(state: State, today: date) -> str | None:
     return actions[index][0]
 
 
+def ask_compare() -> str:
+    """'-' for no comparison, else the GitHub login to compare with."""
+    if not confirm("show your current GitHub graph next to the result (before / after)?", default=True):
+        return "-"
+    while True:
+        login = ask("GitHub user", github_user())
+        if re.fullmatch(r"[A-Za-z0-9-]+", login):
+            return login
+        ui.warn("type a GitHub login (letters, digits, dashes)")
+
+
 def step_push(state: State) -> bool:
     _heading("2.5  Push")
-    print(ui.dim("  create an EMPTY repository on GitHub first (private is fine), e.g. <user>/cheatmap-output"))
+    print(ui.dim("  the target repository must ALREADY EXIST on GitHub, this tool does not create it:"))
+    print(ui.dim("  create it empty (no README), private is fine: https://github.com/new"))
+    print(ui.dim("  or: gh repo create cheatmap-output --private"))
     user = github_user() or "<user>"
     remote = ask("remote URL", f"git@github.com:{user}/cheatmap-output.git")
     force = confirm("if the remote already has commits, replace its history?", default=False)

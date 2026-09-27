@@ -8,8 +8,6 @@
         ▐▛███▜▌
        ▝▜█████▛▘━━━━━━━━━━━━(__________)
          ▘▘ ▝▝                ^^^^^^
-
-         C L A W D   C O O K I N G
 ```
 
 Draw patterns on your GitHub contribution graph with backdated commits:
@@ -39,8 +37,10 @@ Fri · █ · █ · █ · █ · · · · █ · █ · █ · █ · · · ·
    with `git fast-import`: a few seconds for thousands of commits, no network.
 4. The history is pushed to **your own empty repository**, in throttled batches.
 
-The tool (this repo) and the fake commits (your output repo) stay separate:
-clone this repo, create an empty repo on GitHub, push to it.
+The tool (this repo) and the fake commits (your output repo) stay separate.
+**The output repository must already exist**: the tool never creates it.
+Create it empty (no README), private is fine, at <https://github.com/new> or with
+`gh repo create cheatmap-output --private`.
 
 ## Requirements
 
@@ -64,11 +64,13 @@ Main menu
 │   └── 1.2  Random           roll random patterns until one fits    → "use this pattern"
 ├── 2  Generate
 │   ├── 2.1  Pattern type     + its options (text, direction, levels…)
-│   ├── 2.2  Time coverage    by year, by semester, or start (01/01, 01/07) → end (30/06, 31/12)
+│   ├── 2.2  Time coverage    by year, by semester, or start (01/01, 01/07) → end (30/06, 31/12),
+│   │                         from 2008 or your account creation year
 │   ├── 2.3  Days to skip     none, weekends, weekdays, custom days
 │   ├── 2.4  Preview          before (your current graph) / after, then:
 │   │                         push · save as YAML · change any step · show the command
-│   └── 2.5  Push             remote URL, replace or not, throttled push with progress
+│   └── 2.5  Push             remote URL (repo created beforehand), replace or not,
+│                             throttled push with progress
 └── 3  List patterns
 ```
 
@@ -102,6 +104,7 @@ python3 -m cheatmap --period 2025 --pattern gradient-diag -o direction=up-right 
 | `-c, --config` / `--save-config` | read / write a YAML plan |
 | `-n, --dry-run` | preview only |
 | `--compare USER` | show the current graph of USER before the plan |
+| `--user LOGIN` | GitHub login used to check the account creation date (default: `--compare`, or the login in a noreply email) |
 | `--no-preview` | no graph in the output (scripts) |
 | `-r, --remote` | output repository to push to |
 | `--force` / `-y, --yes` | replace a non-empty remote / without the confirmation |
@@ -121,7 +124,12 @@ Full years or half years only, to keep things simple:
 | `2025-H1` (or `S1`) | Jan 1 – Jun 30 |
 | `2025-H2` (or `S2`) | Jul 1 – Dec 31 |
 
-- Up to **3 years** in total (6 halves), from January 1st of *current year − 3*.
+- Any year from **2008** (GitHub's opening) to today, as many as you want.
+- **Your account's creation date** is the real limit: contributions dated
+  before it never show. The tool reads it from the public API (one call, no
+  token) using `--user`, `--compare` or the login in your noreply email:
+  periods ending before it are refused, and the days before it in a period
+  are skipped. If the login is unknown, you get a warning: check it yourself.
 - Periods cannot overlap. The current period is clipped to today; future periods are refused.
 - Each period is its own canvas: patterns are computed on the period's grid
   (one column per week starting on Sunday, one row per weekday), like the yearly
@@ -210,11 +218,24 @@ Image paths are relative to the YAML file. See [examples/](examples/).
 
 - Commits are built locally; GitHub only sees one `git ls-remote` and the pushes.
 - History is pushed oldest first in batches of `--batch-size` commits (default 1000),
-  with `--delay` seconds between pushes (default 2s). About 1 minute for 3 years.
+  with `--delay` seconds between pushes (default 2s). About 15 seconds per year of drawing.
 - A failed push is retried up to 3 times with a doubling delay (max 60s), and the
   slower pace is kept for the rest of the run. Authentication and rejection errors stop immediately.
 - `--compare` reads your public profile page (one request per year, 1.5s apart), no API.
-- Hard limit of 25,000 commits per run.
+- The account creation date costs one unauthenticated API call, cached for the run.
+- Hard limit of 100,000 commits per run.
+
+## Errors
+
+Git errors are translated into plain hints, the raw git message stays below:
+
+| Case | Hint |
+|---|---|
+| Repository not found / no access | create it on GitHub first, check the URL |
+| SSH key refused | check `ssh -T git@github.com` |
+| HTTPS authentication | use the SSH URL or `gh auth login` |
+| Network | check your connection |
+| Remote has other commits | use `--force` to replace its history |
 
 ## Regenerating
 

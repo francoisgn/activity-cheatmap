@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from cheatmap import art, cli, menu, patterns
+from cheatmap import art, cli, github, menu, patterns
 from cheatmap.plan import compute
 
 TODAY = date(2026, 9, 27)
@@ -28,7 +28,8 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(menu.halves_between(date(2024, 1, 1), date(2025, 6, 30)), ["2024", "2025-H1"])
         self.assertEqual(menu.merge_halves(["2023-H2", "2024-H1", "2024-H2"]), ["2023-H2", "2024"])
         starts = menu.half_starts(TODAY)
-        self.assertEqual((starts[0], starts[-1], len(starts)), (date(2023, 1, 1), date(2026, 7, 1), 8))
+        self.assertEqual((starts[0], starts[-1], len(starts)), (date(2008, 1, 1), date(2026, 7, 1), 38))
+        self.assertEqual(menu.half_starts(TODAY, 2017)[0], date(2017, 1, 1))
 
     def test_examples_are_valid(self):
         for title, name, options, skip in menu.EXAMPLES:
@@ -53,10 +54,15 @@ class HelpersTest(unittest.TestCase):
     def test_banner(self):
         lines = art.clawd(color=False)
         self.assertIn("▐▛███▜▌", "\n".join(lines))
-        self.assertEqual(len(art.pixel_title(color=False)), 7)
+        self.assertNotIn("■", art.banner())
 
 
 class WizardTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(github, "account_created", return_value=date(2008, 1, 1))  # no network
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def drive(self, answers):
         out = io.StringIO()
         with ExitStack() as stack:
@@ -81,9 +87,10 @@ class WizardTest(unittest.TestCase):
                 "y",  # customise
                 "2",  # level
                 "2",  # coverage: by semester
-                "5",  # 2025-H1
+                "18",  # years: 2025 (list starts in 2008)
+                "1",  # 2025-H1
                 "2",  # skip weekends
-                "",  # no compare
+                "n",  # no before/after comparison
                 "8",  # show the command
                 "",  # pause
                 "1",  # push

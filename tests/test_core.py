@@ -27,12 +27,19 @@ class PeriodTest(unittest.TestCase):
         self.assertEqual(period.cols, 53)
 
     def test_validation(self):
-        ok = [parse_period(p) for p in ("2023", "2024", "2025")]
+        ok = [parse_period(p) for p in ("2008", "2015", "2023", "2024", "2025")]
         self.assertEqual(validate_periods(ok, TODAY), [])
         self.assertEqual(len(validate_periods([parse_period("2026")], TODAY)), 1)  # clipped
-        for bad in (["2022"], ["2026-H1", "2026"], ["2023", "2024", "2025", "2026-H1"], ["2027"]):
+        for bad in (["2007"], ["2026-H1", "2026"], ["2027"]):
             with self.assertRaises(PeriodError):
                 validate_periods([parse_period(p) for p in bad], TODAY)
+
+    def test_account_creation(self):
+        created = date(2017, 10, 16)
+        with self.assertRaises(PeriodError):
+            validate_periods([parse_period("2017-H1")], TODAY, created)
+        self.assertIn("2017-10-16", validate_periods([parse_period("2017")], TODAY, created)[0])
+        self.assertEqual(validate_periods([parse_period("2018")], TODAY, created), [])
 
 
 def levels_of(name, cols=53, **options):
@@ -119,8 +126,14 @@ class PlanTest(unittest.TestCase):
     def test_limits(self):
         with self.assertRaises(PlanError):
             compute(Plan([Segment(["2025"], "solid")], scale=11), TODAY)
+        years = [str(year) for year in range(2008, 2026)]
         with self.assertRaises(PlanError):
-            compute(Plan([Segment(["2023", "2024", "2025"], "solid")], scale=10), TODAY)
+            compute(Plan([Segment(years, "solid")], scale=10), TODAY)
+
+    def test_days_before_account_are_dropped(self):
+        layout, warnings = compute(Plan([Segment(["2017"], "solid")]), TODAY, date(2017, 10, 16))
+        self.assertEqual(layout.schedule()[0][0], date(2017, 10, 16))
+        self.assertEqual(len(warnings), 1)
 
 
 class ConfigTest(unittest.TestCase):
@@ -153,6 +166,11 @@ class ConfigTest(unittest.TestCase):
 
 
 class GithubTest(unittest.TestCase):
+    def test_login_from_email(self):
+        self.assertEqual(github.login_from_email("123+octo-cat@users.noreply.github.com"), "octo-cat")
+        self.assertEqual(github.login_from_email("octocat@users.noreply.github.com\n"), "octocat")
+        self.assertEqual(github.login_from_email("me@example.com"), "")
+
     def test_parse(self):
         html = (
             '<td tabindex="0" data-date="2025-01-05" id="a" data-level="0" class="ContributionCalendar-day"></td>'

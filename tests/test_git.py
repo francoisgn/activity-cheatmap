@@ -10,7 +10,7 @@ from datetime import date
 from pathlib import Path
 from unittest import mock
 
-from cheatmap import cli, gitops
+from cheatmap import cli, github, gitops
 
 
 def git(*args, cwd=None):
@@ -54,6 +54,14 @@ class GitTest(unittest.TestCase):
         gitops.build(generated, [(date(2025, 1, 1), 1)], "Me", "me@example.com", "msg", "main")
         gitops.prepare_workdir(generated)
         self.assertFalse(generated.exists())
+
+    def test_explain(self):
+        self.assertIn(
+            "create it on GitHub first", gitops.explain("ERROR: Repository not found.\nfatal: Could not read")
+        )
+        self.assertIn("ssh -T", gitops.explain("git@github.com: Permission denied (publickey)."))
+        self.assertIn("network", gitops.explain("ssh: Could not resolve host github.com"))
+        self.assertIsNone(gitops.explain("something else"))
 
     def test_batch_ends(self):
         self.assertEqual(gitops.batch_ends(10, 4), [3, 7, 9])
@@ -99,6 +107,11 @@ class GitTest(unittest.TestCase):
 
 
 class CliTest(unittest.TestCase):
+    def setUp(self):
+        patcher = mock.patch.object(github, "account_created", return_value=date(2008, 1, 1))  # no network
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def run_cli(self, *argv):
         out, err = io.StringIO(), io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
@@ -135,6 +148,10 @@ class CliTest(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("--force", output)
 
+            code, output = self.run_cli(*common[:4], "--remote", str(Path(tmp) / "missing.git"), "--no-preview")
+            self.assertEqual(code, 1)
+            self.assertIn("create it on GitHub first", output)
+
             code, output = self.run_cli(*common, "-o", "levels=0,0,0,0,0,0,2", "--force", "--yes")
             self.assertEqual(code, 0, output)
             self.assertEqual(git("rev-list", "--count", "main", cwd=remote).strip(), str(26 * 6))
@@ -143,7 +160,7 @@ class CliTest(unittest.TestCase):
         code, output = self.run_cli("-p", "2025", "-P", "gradient-diag", "-o", "direction=up-left", "-n")
         self.assertEqual(code, 0, output)
         self.assertIn("dry run", output)
-        for argv in (["-p", "2025"], ["-p", "2019", "-P", "solid", "-n"], ["-p", "2025", "-P", "solid", "-o", "x"]):
+        for argv in (["-p", "2025"], ["-p", "2007", "-P", "solid", "-n"], ["-p", "2025", "-P", "solid", "-o", "x"]):
             code, output = self.run_cli(*argv)
             self.assertEqual(code, 1, argv)
 

@@ -305,6 +305,20 @@ python3 -m unittest discover -s tests
 pre-commit install      # ruff, YAML/TOML checks and unit tests on each commit
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+
+## License
+
+[PolyForm Strict 1.0.0](LICENSE): source-available, **not** open source.
+
+- You may **use** the tool for any noncommercial purpose, e.g. drawing on your own graph.
+- You may **not** copy, redistribute, reuse the code elsewhere, modify it
+  outside of contributions, use it commercially, or build a competing product.
+- **Contributions are welcome**: forking and changing the code to submit an
+  issue or a pull request is explicitly allowed, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+Versions published before this license change were released under MIT.
+
 ## Support
 
 If this made your graph smile, you can buy me a coffee:

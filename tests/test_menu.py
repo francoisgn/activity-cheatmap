@@ -117,6 +117,19 @@ class WizardTest(unittest.TestCase):
         self.assertIn("Clawd parade", output)
         self.assertIn("sprite", output)
 
+    def test_covid_special(self):
+        seen = []
+        with mock.patch.object(
+            menu, "wizard", side_effect=lambda today, state, ready=False: seen.append((state, ready))
+        ):
+            code, output = self.drive(["3", "5", "2", "q"])  # show all 4, then pick covid-sleep
+        self.assertEqual(code, 0)
+        for name in ("covid-mask", "covid-sleep", "covid-2020", "stay-home"):
+            self.assertIn(f"-o name={name}", output)
+        state, ready = seen[0]
+        self.assertTrue(ready)
+        self.assertEqual((state.pattern, state.options, state.periods), ("sprite", {"name": "covid-sleep"}, ["2020"]))
+
     def test_needs_a_terminal(self):
         with mock.patch("sys.stdin.isatty", return_value=False), redirect_stderr(io.StringIO()):
             self.assertEqual(menu.main_menu(TODAY), 1)

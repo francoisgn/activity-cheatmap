@@ -18,6 +18,7 @@ from pathlib import Path
 from . import art, cli, config, github, patterns, ui
 from .periods import FIRST_YEAR, PeriodError, parse_period, validate_periods
 from .plan import DEFAULT_SCALE, MAX_SCALE, Plan, PlanError, Segment, parse_skip
+from .sprites import SCENES_2020
 
 
 class Back(Exception):
@@ -538,10 +539,15 @@ STEPS = {"pattern": step_pattern, "coverage": step_coverage, "skip": step_skip, 
 ORDER = ["pattern", "coverage", "skip"]
 
 
-def wizard(today: date, state: State | None = None) -> None:
-    """Pattern -> coverage -> skip -> preview -> push. '<' / 'b' goes one step back."""
+def wizard(today: date, state: State | None = None, ready: bool = False) -> None:
+    """Pattern -> coverage -> skip -> preview -> push. '<' / 'b' goes one step back.
+
+    `ready`: the state is complete (pattern and periods), start at the preview.
+    """
     state = state or State()
-    if state.pattern:
+    if ready:
+        position = len(ORDER)
+    elif state.pattern:
         state.periods = []  # examples are shown on last year: pick the real coverage
         position = 1
     else:
@@ -579,6 +585,30 @@ def wizard(today: date, state: State | None = None) -> None:
             continue
 
 
+# --- 2020 special --------------------------------------------------------
+
+
+def covid_menu(today: date) -> State | None:
+    """Predefined 2020 scenes: many people could not work that year."""
+    names = list(SCENES_2020)
+    items = [(name, SCENES_2020[name]) for name in names] + [("Show all 4", "previews on 2020")]
+    while True:
+        try:
+            index = choose("2020  Lockdown special", items)
+        except Back:
+            return None
+        if index == len(names):
+            for name in names:
+                show_scene(name)
+            continue
+        return State(pattern="sprite", options={"name": names[index]}, periods=["2020"])
+
+
+def show_scene(name: str) -> None:
+    _heading(f"{name}  {ui.dim('(' + SCENES_2020[name] + ')')}")
+    run_cli(State(pattern="sprite", options={"name": name}, periods=["2020"]).argv("--dry-run"))
+
+
 # --- main menu -----------------------------------------------------------
 
 
@@ -601,6 +631,7 @@ def main_menu(today: date | None = None) -> int:
                 [
                     ("Pattern examples", "gallery and random patterns"),
                     ("Generate", "step by step: pattern, dates, preview, push"),
+                    ("2020 lockdown special", "Clawd and COVID scenes for the year 2020"),
                     ("List patterns", "all patterns and options"),
                 ],
                 back=None,
@@ -611,6 +642,10 @@ def main_menu(today: date | None = None) -> int:
                     wizard(today, picked)
             elif index == 1:
                 wizard(today)
+            elif index == 2:
+                picked = covid_menu(today)
+                if picked:
+                    wizard(today, picked, ready=True)
             else:
                 cli.list_patterns()
                 pause()

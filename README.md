@@ -72,7 +72,8 @@ Main menu
 │   └── 2.5  Push             remote URL (repo created beforehand); an existing drawing
 │                             is kept (periods added or redrawn) unless you wipe it;
 │                             throttled push with progress
-└── 3  List patterns
+├── 3  2020 lockdown special  predefined Clawd / COVID scenes for 2020, straight to the preview
+└── 4  List patterns
 ```
 
 Navigation: type the number, `b` to go back, `q` to quit. In text prompts,
@@ -164,7 +165,7 @@ Options are passed with `-o key=value`.
 | `wave` | sine wave | `period`, `amplitude` |
 | `text` | 7-pixel font (A–Z, 0–9, `! ? . , : ' - + / < > = # ♥`) | `text`, `fg`, `bg`, `spacing`, `align` |
 | `image` | pixel art from a file | `file`, `tile`, `gap`, `fit`, `invert`, `align` |
-| `sprite` | built-in pixel art: `clawd`, `invader`, `ghost`, `heart` | `name`, `tile`, `gap`, `align` |
+| `sprite` | built-in pixel art: `clawd`, `invader`, `ghost`, `heart`, and the 2020 scenes below | `name`, `tile`, `gap`, `align` |
 
 `direction` is the side that gets darker. `cycles` repeats the gradient,
 `mirror=true` makes it go light → dark → light.
@@ -176,6 +177,37 @@ characters (space = empty, `.` light, `:` medium, `+` dark, `#` darkest), see
 [examples/invader.txt](examples/invader.txt). Any other image format (PNG, JPEG…)
 needs Pillow and is shrunk to 7 pixels high, dark pixels = dark cells: simple,
 high-contrast images work best.
+
+## 2020 lockdown special
+
+Many people could not work in 2020. The menu has a dedicated entry with four
+predefined scenes for that year (also usable as `sprite` names):
+
+| Scene | Content |
+|---|---|
+| `covid-mask` | Clawd wearing a mask, a virus and COVID |
+| `covid-sleep` | Clawd sleeping through it: z Z z, COVID in the corner |
+| `covid-2020` | two masked Clawds around 2020 |
+| `stay-home` | STAY HOME |
+
+```
+2020  after  (1044 commits, existing activity ignored)
+    Jan     Feb       Mar     Apr     May       Jun     Jul     Aug       Sep     Oct       Nov     Dec
+      · · · · · · · · · · · · · · · · ▓ ▓ ▓ ▓ ▓ · · ▒ ▒ ▒ · · · · · · · · ▓ ▓ ▓ · ▓ ▓ ▓ · ▓ · ▓ · ▓ · ▓ ▓ · ·
+Mon   · █ █ █ █ █ █ █ · · · · · · · · · · · · ▓ · · · · ▒ · · · · · · · · ▓ · · · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ ·
+      · █ ▒ █ █ █ ▒ █ · · · ▒ ▒ ▒ · · · · · ▓ · · · · ▒ · · · · · · · · · ▓ · · · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ ·
+Wed · █ █ █ █ █ █ █ █ █ · · · · ▒ · · · · ▓ · · · · ▒ · · · · · · · · · · ▓ · · · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ · ▓ ·
+    · · █ █ █ █ █ █ █ · · · · ▒ · · · · ▓ · · · · · ▒ ▒ ▒ · · · · · · · · ▓ ▓ ▓ · ▓ ▓ ▓ · · ▓ · · ▓ · ▓ ▓ · ·
+Fri · · █ · █ · █ · █ · · · ▒ · · · · ▓ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·
+    · · · · · · · · · · · · ▒ ▒ ▒ · · ▓ ▓ ▓ ▓ ▓ · · · · · · · · · · · · · · · · · · · · · · · · · · · · · ·
+```
+
+```sh
+python3 -m cheatmap -p 2020 -P sprite -o name=covid-sleep --dry-run
+```
+
+The scenes are sized for a full year (51 of its 53 weeks). The creation date
+of your account still applies: before it, nothing shows.
 
 ## Days without commits
 

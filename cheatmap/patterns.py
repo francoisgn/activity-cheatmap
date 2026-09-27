@@ -15,6 +15,7 @@ from typing import Any
 
 from . import font
 from .periods import ROWS
+from .sprites import SPRITES
 
 MAX_LEVEL = 4
 CellFn = Callable[[int, int], int]
@@ -395,15 +396,6 @@ def _image(opts, cols):
     else:
         bitmap = load_raster(path, cols, opts["fit"], opts["invert"])
     return _place(bitmap, cols, opts["align"], tile_gap=opts["gap"] if opts["tile"] else None)
-
-
-# Built-in pixel art (text-art format, 7 rows max, see load_text_art).
-SPRITES = {
-    "clawd": ["", " #######", " # ### #", "#########", " #######", " # # # #"],
-    "invader": ["  #     #", "   #   #", "  #######", " ## ### ##", "###########", "# ####### #", "# #     # #"],
-    "ghost": ["  ###", " #####", "## # ##", "#######", "#######", "#######", "# # # #"],
-    "heart": ["", " ## ##", "#######", "#######", " #####", "  ###", "   #"],
-}
 
 
 @register(

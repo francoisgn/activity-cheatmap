@@ -98,6 +98,20 @@ class PatternTest(unittest.TestCase):
                 for row in levels_of(name, **required.get(name, {})):
                     self.assertTrue(all(0 <= level <= 4 for level in row), name)
 
+    def test_sprites(self):
+        from cheatmap.sprites import SCENES_2020, SPRITES
+
+        self.assertLessEqual(set(SCENES_2020), set(SPRITES))
+        for name, rows in SPRITES.items():
+            self.assertLessEqual(len(rows), 7, name)
+            self.assertTrue(set("".join(rows)) <= set(" #01234"), name)
+        for name in SCENES_2020:  # one spare column on each side of the year
+            self.assertLessEqual(max(len(row) for row in SPRITES[name]), 51, name)
+            cols = parse_period("2020").cols
+            cell = patterns.build("sprite", {"name": name}, cols)
+            edges = [cell(col, row) for col in (0, cols - 1) for row in range(7)]
+            self.assertEqual(edges, [0] * 14, name)
+
     def test_font_glyphs_are_7_rows(self):
         for char, rows in font.GLYPHS.items():
             self.assertEqual(len(rows), 7, char)

@@ -14,6 +14,8 @@ Draw patterns on your GitHub contribution graph with backdated commits:
 gradients, weekly rhythms, geometric shapes, text and pixel art.
 Unlike random fillers, every day's shade is decided by the pattern.
 
+**GitHub only**: GitLab counts pushes at push time, not commits at their date, so backdating can't work there.
+
 Inspired by [dacappo/github-heatmap](https://github.com/dacappo/github-heatmap), rewritten from scratch.
 
 ```

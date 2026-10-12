@@ -199,7 +199,7 @@ class ConsoleTest(unittest.TestCase):
     def test_output_encoding_without_block_characters(self):
         """Windows with a redirected output: cp1252 has no '█', it must not crash."""
         raw = io.BytesIO()
-        stream = io.TextIOWrapper(raw, encoding="cp1252")
+        stream = io.TextIOWrapper(raw, encoding="cp1252", newline="\n")
         with mock.patch("sys.stdout", stream), mock.patch("sys.stderr", stream), mock.patch.object(ui, "_ANSI", True):
             ui.setup_console()
             print("Less █ More")

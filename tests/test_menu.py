@@ -51,6 +51,11 @@ class HelpersTest(unittest.TestCase):
         self.assertEqual(compute(cli.build_plan(args), TODAY)[0].schedule(), compute(state.plan(), TODAY)[0].schedule())
         self.assertIn("'text=HI 2026'", menu.command(state.argv()))
 
+    def test_powershell_quoting(self):
+        with mock.patch.object(menu.os, "name", "nt"):
+            quoted = [menu.quote(arg) for arg in ("--dry-run", "levels=1,2,3", "it's", "C:\\Users\\me\\plan.yaml")]
+        self.assertEqual(quoted, ["--dry-run", "'levels=1,2,3'", "'it''s'", "C:\\Users\\me\\plan.yaml"])
+
     def test_banner(self):
         lines = art.clawd(color=False)
         self.assertIn("▐▛███▜▌", "\n".join(lines))

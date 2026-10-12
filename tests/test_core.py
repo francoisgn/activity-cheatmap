@@ -1,9 +1,11 @@
+import io
 import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest import mock
 
-from cheatmap import config, font, github, patterns
+from cheatmap import config, font, github, patterns, ui
 from cheatmap.periods import PeriodError, parse_period, validate_periods
 from cheatmap.plan import Plan, PlanError, Segment, compute, parse_skip
 
@@ -191,6 +193,18 @@ class GithubTest(unittest.TestCase):
             '<td data-date="2025-01-06" data-level="3" role="gridcell" class="ContributionCalendar-day"></td>'
         )
         self.assertEqual(github.parse(html), {date(2025, 1, 5): 0, date(2025, 1, 6): 3})
+
+
+class ConsoleTest(unittest.TestCase):
+    def test_output_encoding_without_block_characters(self):
+        """Windows with a redirected output: cp1252 has no '█', it must not crash."""
+        raw = io.BytesIO()
+        stream = io.TextIOWrapper(raw, encoding="cp1252")
+        with mock.patch("sys.stdout", stream), mock.patch("sys.stderr", stream), mock.patch.object(ui, "_ANSI", True):
+            ui.setup_console()
+            print("Less █ More")
+            stream.flush()
+        self.assertEqual(raw.getvalue(), b"Less ? More\n")
 
 
 if __name__ == "__main__":

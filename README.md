@@ -14,6 +14,8 @@ Draw patterns on your GitHub contribution graph with backdated commits:
 gradients, weekly rhythms, geometric shapes, text and pixel art.
 Unlike random fillers, every day's shade is decided by the pattern.
 
+**GitHub only**: GitLab counts pushes at push time, not commits at their date, so backdating can't work there.
+
 Inspired by [dacappo/github-heatmap](https://github.com/dacappo/github-heatmap), rewritten from scratch.
 
 ```
@@ -47,6 +49,18 @@ Create it empty (no README), private is fine, at <https://github.com/new> or wit
 - Python 3.9+ (the macOS system `python3` works) and git 2.28+, no dependency for the core.
 - Optional: `pip install pyyaml` to read YAML plans, `pip install pillow` for image files.
   Or `pip install ".[all]"`, which also installs a `cheatmap` command.
+- macOS, Linux and Windows (PowerShell): see [Windows](#windows) below.
+
+### Windows
+
+- Install Python from <https://www.python.org/downloads/> (or `winget install Python.Python.3.13`)
+  and [Git for Windows](https://git-scm.com/download/win).
+- Run `python -m cheatmap` instead of `python3 -m cheatmap` (`python3` is only a
+  Microsoft Store alias). The menu prints commands in PowerShell syntax.
+- Multi-line examples below use `\`: in PowerShell, continue lines with a backtick `` ` ``,
+  or write the command on one line.
+- Windows Terminal (default on Windows 11) shows the colours and the spinner; the
+  legacy console gets them too when it supports ANSI, plain text otherwise.
 
 ## Quick start: the menu
 

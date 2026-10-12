@@ -6,6 +6,7 @@ equivalent command, so anything done here can be scripted.
 
 from __future__ import annotations
 
+import os
 import random
 import re
 import shlex
@@ -185,8 +186,20 @@ def non_default(name: str, options: dict) -> dict:
     return {key: value for key, value in options.items() if value != defaults.get(key)}
 
 
+# On Windows, `python3` is only a Microsoft Store alias; the python.org installer provides `python`.
+PYTHON = "python" if os.name == "nt" else "python3"
+_PS_SAFE = re.compile(r"[\w%+=:./\\-]+")
+
+
+def quote(arg: str) -> str:
+    """Quote for the current shell: PowerShell on Windows, POSIX sh elsewhere."""
+    if os.name != "nt":
+        return shlex.quote(arg)
+    return arg if _PS_SAFE.fullmatch(arg) else "'" + arg.replace("'", "''") + "'"
+
+
 def command(argv: list[str]) -> str:
-    return "python3 -m cheatmap " + shlex.join(argv)
+    return f"{PYTHON} -m cheatmap " + " ".join(quote(arg) for arg in argv)
 
 
 def run_cli(argv: list[str]) -> int:
@@ -532,7 +545,7 @@ def step_save(state: State) -> None:
         return
     config.save(state.plan(), path)
     ui.ok(f"plan saved to {path}")
-    print(ui.dim(f"  $ python3 -m cheatmap --config {shlex.quote(str(path))} --dry-run"))
+    print(ui.dim("  $ " + command(["--config", str(path), "--dry-run"])))
 
 
 STEPS = {"pattern": step_pattern, "coverage": step_coverage, "skip": step_skip, "scale": step_scale}
@@ -613,7 +626,7 @@ def show_scene(name: str) -> None:
 
 
 def clear() -> None:
-    if sys.stdout.isatty():
+    if ui.ansi():
         print("\033[2J\033[H", end="")
 
 

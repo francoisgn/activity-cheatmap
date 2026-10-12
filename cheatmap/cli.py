@@ -323,6 +323,7 @@ def years_of(days) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    ui.setup_console()
     args = parse_args(argv)
     try:
         return run(args, argv_empty=not argv)

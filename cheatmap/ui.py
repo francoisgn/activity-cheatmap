@@ -1,20 +1,58 @@
 """Terminal output: coloured status lines (ok/warn/ko/info) and a spinner.
 
-Colours are disabled when the stream is not a TTY or when NO_COLOR is set.
+Colours are disabled when the stream is not a TTY, when NO_COLOR is set, or
+on a Windows console that cannot interpret ANSI sequences.
 """
 
 from __future__ import annotations
 
+import contextlib
 import itertools
 import os
 import sys
 import threading
 import time
 
+_ANSI = True  # False on a Windows console without virtual terminal support
+
+
+def _enable_windows_ansi() -> bool:
+    """Turn on ANSI sequences in the Windows console (on by default in Windows Terminal, not in conhost)."""
+    import ctypes
+
+    kernel32 = ctypes.windll.kernel32
+    enabled = True
+    for handle_id in (-11, -12):  # STD_OUTPUT_HANDLE, STD_ERROR_HANDLE
+        handle = kernel32.GetStdHandle(handle_id)
+        mode = ctypes.c_uint32()
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            continue  # redirected: not a console, colours are off anyway
+        if not kernel32.SetConsoleMode(handle, mode.value | 0x0004):  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+            enabled = False
+    return enabled
+
+
+def setup_console() -> None:
+    """Never crash on a character the output encoding lacks (e.g. cp1252 when redirected on Windows)."""
+    global _ANSI
+    for stream in (sys.stdout, sys.stderr):
+        with contextlib.suppress(AttributeError, ValueError):  # replaced stream (tests, IDE)
+            stream.reconfigure(errors="replace")
+    if os.name == "nt":
+        try:
+            _ANSI = _enable_windows_ansi()
+        except (AttributeError, OSError):
+            _ANSI = False
+
+
+def ansi(stream=None) -> bool:
+    """The stream is a terminal that interprets escape sequences."""
+    stream = stream or sys.stdout
+    return _ANSI and stream.isatty()
+
 
 def color_enabled(stream=None) -> bool:
-    stream = stream or sys.stdout
-    return stream.isatty() and not os.environ.get("NO_COLOR")
+    return ansi(stream) and not os.environ.get("NO_COLOR")
 
 
 GREEN, YELLOW, RED, BLUE, CYAN, DIM, BOLD = "32", "33", "31", "34", "36", "2", "1"
@@ -64,7 +102,7 @@ class Spinner:
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
-        self._tty = sys.stderr.isatty()
+        self._tty = ansi(sys.stderr)
 
     def update(self, msg: str) -> None:
         with self._lock:
